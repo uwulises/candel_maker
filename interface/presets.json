@@ -1,0 +1,10 @@
+{
+  "Home": {
+    "position": 0,
+    "speed": 500
+  },
+  "Pick": {
+    "position": 1200,
+    "speed": 800
+  }
+}
