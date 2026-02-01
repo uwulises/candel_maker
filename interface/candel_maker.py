@@ -1,6 +1,7 @@
 import sys
 import json
 import os
+import time
 import serial
 import serial.tools.list_ports
 
@@ -22,11 +23,12 @@ class StepperController(QWidget):
         self.current_position = 0
         self.presets = {}
 
-        self.setWindowTitle("Candel Maker")
+        self.setWindowTitle("Candle Maker")
         self.setFixedWidth(460)
         script_dir = os.path.dirname(os.path.realpath(__file__))
-        icon_path = os.path.join(script_dir, 'logo.png') # Assumes 'logo.png' is in the same directory
-        self.setWindowIcon(QIcon(icon_path)) # Set the window icon
+        # Assumes 'logo.png' is in the same directory
+        icon_path = os.path.join(script_dir, 'logo.png')
+        self.setWindowIcon(QIcon(icon_path))  # Set the window icon
         self.init_ui()
         self.refresh_ports()
         self.load_presets()
@@ -44,7 +46,6 @@ class StepperController(QWidget):
         serial_layout = QHBoxLayout()
 
         self.port_combo = QComboBox()
-
 
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.clicked.connect(self.toggle_connection)
@@ -86,19 +87,17 @@ class StepperController(QWidget):
         # ===== Index Move =====
         index_group = QGroupBox("Index Move")
         index_layout = QHBoxLayout()
-        
+
         self.target_index = QSpinBox()
         self.target_index.setRange(0, 5)
         self.target_index.setSuffix(" index")
         self.index_btn = QPushButton("Move to Index")
-        self.index_btn.clicked.connect(lambda: self.index(self.target_index.value()))
+        self.index_btn.clicked.connect(
+            lambda: self.index(self.target_index.value()))
         index_layout.addWidget(self.target_index)
         index_layout.addWidget(self.index_btn)
         index_group.setLayout(index_layout)
         layout.addWidget(index_group)
-        
-
-
 
         # ===== Presets =====
         preset_group = QGroupBox("Presets")
@@ -106,18 +105,15 @@ class StepperController(QWidget):
 
         self.preset_combo = QComboBox()
 
-        self.load_preset_btn = QPushButton("Load")
+        self.run_preset_btn = QPushButton("Run preset")
 
-
-        self.load_preset_btn.clicked.connect(self.load_preset)
+        self.run_preset_btn.clicked.connect(self.run_preset)
 
         preset_layout.addWidget(self.preset_combo)
-        preset_layout.addWidget(self.load_preset_btn)
+        preset_layout.addWidget(self.run_preset_btn)
 
         preset_group.setLayout(preset_layout)
         layout.addWidget(preset_group)
-
-    
 
         # ===== Status =====
         self.status_label = QLabel("Status: Idle")
@@ -135,15 +131,12 @@ class StepperController(QWidget):
         self.preset_combo.clear()
         self.preset_combo.addItems(self.presets.keys())
 
-    def load_preset(self):
+    def run_preset(self):
         name = self.preset_combo.currentText()
         if name not in self.presets:
             return
 
         preset = self.presets[name]
-
-        self.target_spin.setValue(preset["position"])
-
         reply = QMessageBox.question(
             self, "Load Preset",
             f"Move to preset '{name}'?",
@@ -151,9 +144,23 @@ class StepperController(QWidget):
         )
 
         if reply == QMessageBox.Yes:
-            self.move_absolute()
+            # Run each movement from position list
+            actual_time = time.time()
 
+            for i in range(len(preset["positions"])):
+                index_number = preset["indexes"][i]
+                position = preset["positions"][i]
+                self.target_spin.setValue(position)
+                self.target_index.setValue(index_number)
+                self.index(index_number)
+                self.move_absolute()
+                # Wait for movement to complete
+                while time.time() - actual_time < 10:
+                    QApplication.processEvents()
+                actual_time = time.time()
+            self.status_label.setText(f"Preset '{name}' completed")
     # ---------------- Serial ----------------
+
     def refresh_ports(self):
         self.port_combo.clear()
         for p in serial.tools.list_ports.comports():
@@ -185,8 +192,8 @@ class StepperController(QWidget):
         while self.serial.in_waiting:
             line = self.serial.readline().decode().strip()
 
-
     # ---------------- Controls ----------------
+
     def move_absolute(self):
         target = self.target_spin.value()
         self.send(f"Moveto_mm{target}")
@@ -204,6 +211,7 @@ class StepperController(QWidget):
         self.send(f"index_n{index_number}")
         self.status_label.setText(f"Moving to index {index_number}")
     # ---------------- Styling ----------------
+
     def style_limit(self, label, active):
         label.setStyleSheet(
             f"""
